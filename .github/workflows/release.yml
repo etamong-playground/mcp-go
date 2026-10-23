@@ -1,0 +1,40 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable vX.Y.Z module version
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Require main and a release version
+        shell: bash
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          [[ "$RELEASE_VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./... && go vet ./... && go test -race ./...
+      - name: Cut immutable module tag
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_VERSION"; then
+            echo 'Version already exists'
+            exit 1
+          fi
+          git tag "$RELEASE_VERSION"
+          git push origin "refs/tags/$RELEASE_VERSION"
