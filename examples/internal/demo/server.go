@@ -22,6 +22,7 @@ func Settings() (mcphttp.Config, string, error) {
 
 func Serve(cfg mcphttp.Config, verifier authn.Verifier) error {
 	server := mcp.NewServer(&mcp.Implementation{Name: "protected-example", Version: "0.1.0"}, nil)
+	server.AddReceivingMiddleware(mcphttp.PrincipalDeadline)
 	mcp.AddTool(server, &mcp.Tool{Name: "whoami", Description: "Inspect the authenticated subject", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]string, error) {
 		p, ok := mcphttp.PrincipalFromContext(ctx)
 		if !ok {

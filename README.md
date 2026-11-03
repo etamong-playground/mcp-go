@@ -56,6 +56,22 @@ The endpoint independently rejects missing identity/client, a mismatched issuer/
 Use `PrincipalFromContext` in tool handlers, then enforce operation scopes, object permissions and account policy in your application.
 A principal does not imply administrator authority.
 
+## Bound method execution by credential expiry
+
+Install the optional SDK receiving middleware before serving the protected endpoint:
+
+```go
+server.AddReceivingMiddleware(mcphttp.PrincipalDeadline)
+```
+
+`PrincipalDeadline` requires the verified principal supplied by `NewProtectedEndpoint` and rejects missing, zero-expiry or expired authority before method dispatch.
+It bounds each method context by that expiry while preserving any earlier caller deadline and caller cancellation, then releases the derived context when the method returns.
+Propagate the context to database and provider calls and stop work when it is cancelled.
+Cancellation is cooperative: the middleware cannot interrupt a handler that ignores its context or undo a completed operation.
+It does not renew credentials or replace application permission checks.
+Without this middleware, the endpoint still checks expiry at HTTP request admission; it does not impose an expiry-derived execution deadline.
+Do not install it on an unprotected SDK transport, which has no verified principal.
+
 ## Configuration and optional capabilities
 
 | Setting or helper | Contract |
@@ -71,6 +87,7 @@ A principal does not imply administrator authority.
 | `ReadTimeout` | Required positive body-read timeout, at most five minutes. |
 | `WriteError` | Optional rejected-transport response customization; dispatch remains stopped. |
 | `MetadataHandler` | Optional helper mounting; your router must still serve discovery at the advertised URL. |
+| `PrincipalDeadline` | Optional SDK receiving middleware bounding method contexts by verified principal expiry; requires the protected endpoint. |
 | SDK tools/resources/prompts | Register directly with the SDK when the application needs them. |
 
 `offline_access` belongs to authorization-server/client metadata and is rejected as a resource scope requirement or advertisement.
@@ -81,6 +98,7 @@ Keep native-client bootstrap metadata, logging/metrics and semantic durable audi
 ## Runnable examples
 
 Both examples bind to `127.0.0.1:8080` and expose a bounded, authenticated `whoami` tool.
+They install `PrincipalDeadline` on the SDK server so method contexts also carry the verified credential expiry.
 Set `MCP_RESOURCE`, `MCP_ISSUER` and `MCP_CLIENT_ID` to the intended resource and issuer registration.
 Production HTTPS termination and authorization-server registration remain application responsibilities.
 
