@@ -1,0 +1,59 @@
+name: Dependency updates
+on:
+  workflow_dispatch:
+    inputs:
+      write:
+        description: Create or refresh draft dependency PRs after a qualified dry-run.
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: dependency-updates-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.repository == 'etamong-playground/mcp-go' && github.ref == 'refs/heads/main'
+    runs-on: arc-etamong-playground
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.19.0'
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Obtain the caller credential
+        id: broker
+        env:
+          UPDATER_BROKER_ORIGIN: ${{ vars.DEPENDENCY_UPDATER_BROKER_ORIGIN }}
+          UPDATER_AUDIENCE: ${{ vars.DEPENDENCY_UPDATER_AUDIENCE }}
+          UPDATER_WRITE: ${{ inputs.write }}
+        run: python3 .github/scripts/dependency_updates_token.py mint
+      - uses: etamong-playground/shared-actions/.github/actions/dependency-updates@4e8e28f6da08b89580a37607aa038c3a7fd8ec4a
+        with:
+          caller-token: ${{ steps.broker.outputs.token }}
+          bot-login: ditto-m[bot]
+          dry-run: ${{ !inputs.write }}
+          write-enabled: ${{ inputs.write }}
+      - name: Revoke the caller credential
+        if: ${{ always() && steps.broker.outputs.token != '' }}
+        env:
+          UPDATER_TOKEN: ${{ steps.broker.outputs.token }}
+        run: python3 .github/scripts/dependency_updates_token.py revoke
+      - name: Retain credential-free operation identity
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dependency-update-operation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .tmp/dependency-updates-operation.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
