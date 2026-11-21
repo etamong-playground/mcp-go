@@ -119,3 +119,25 @@ The build includes the examples; tests exercise real JWT verification, protected
 Dispatch the `Release` workflow on `main` with an unused `vX.Y.Z` version.
 It tests the exact checkout before creating the tag and does not overwrite an existing version.
 Consumers pin an immutable version in `go.mod`; do not push release tags manually.
+
+## Manual dependency updates
+
+The `Dependency updates` workflow uses the pinned shared Renovate worker to propose draft Go dependency PRs.
+It accepts manual runs on `main` only, defaults to a read-only dry-run and serializes runs; it has no recurring schedule, automatic merge or deployment.
+The writer credential is obtained and revoked within the same job through a GitHub OIDC exchange, without repository signing keys or operator credentials.
+
+Before dispatch, qualify the ARC runner's TLS/network path and Hoopa's fixed workload registration under the [caller decision](https://github.com/etamong-playground/planning/blob/main/docs/adr/hoopa/0009-github-actions-updater-caller.md).
+Configure `DEPENDENCY_UPDATER_BROKER_ORIGIN` with the approved HTTPS listener origin and `DEPENDENCY_UPDATER_AUDIENCE` with `https://hoopa.onul.me/dependency-updates` in repository Actions variables.
+The audience identifies the exchange and is not a service URL.
+Missing configuration fails visibly; the workflow does not create a grant or activate the broker.
+
+Dispatch with `write=false` and inspect the bounded update preview, then use `write=true` only after the dry-run and caller are qualified.
+Writes request only this repository, with Contents/Pull requests/Commit statuses write and Issues read; update PRs retain the existing consumer CI and review gates.
+Verify the manifest/checksum pair, repeated-run behavior and an induced exact-commit artifact failure before relying on the integration.
+A successful updater run does not establish that downstream CI passes or a deployed consumer is patched.
+
+The operation artifact contains only the issuance ID, creation time and requested scope.
+If issuance is uncertain, inspect that operation through the authorized Hoopa recovery process before another run; the caller never retries a mint or replaces an existing local operation record automatically.
+Cleanup attempts credential revocation even after a failed worker; loss of the runner still relies on provider expiry.
+Disable the workflow to stop subsequent runs, and cancel an active run plus revoke its credential for immediate containment.
+Run `python3 -m unittest discover -s .github/scripts -p 'test_*.py'` to validate credential routing and failure handling without live issuance.
